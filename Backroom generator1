@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>后室建筑师 | The Liminal Architect Ultra 4K</title>
+    
+    <!-- 核心依赖引入 (UMD 模式保证本地双击可运行) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- 控制器插件 -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
+    <!-- 动画库 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap');
+        
+        :root { --bg-color: #050505; }
+        body { margin: 0; overflow: hidden; font-family: 'Noto Sans SC', sans-serif; background-color: var(--bg-color); color: #e2e2e2; }
+        
+        #canvas-container { width: 100vw; height: 100vh; outline: none; }
+        
+        .glass-ui { 
+            background: rgba(10, 10, 10, 0.92); 
+            backdrop-filter: blur(40px); 
+            border: 1px solid rgba(255, 255, 255, 0.1); 
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.9); 
+        }
+        
+        .btn-primary { 
+            background: #ffffff; 
+            color: #000; 
+            transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1); 
+            font-weight: 700; 
+        }
+        .btn-primary:hover { 
+            transform: translateY(-3px); 
+            box-shadow: 0 10px 30px rgba(255, 255, 255, 0.3); 
+        }
+        
+        .option-card { 
+            border: 1px solid rgba(255,255,255,0.08); 
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
+            cursor: pointer; 
+            background: rgba(255,255,255,0.02); 
+        }
+        .option-card.active { 
+            border-color: #fff; 
+            background: rgba(255,255,255,0.1); 
+            transform: scale(1.02); 
+            box-shadow: 0 0 20px rgba(255,255,255,0.1); 
+        }
+        
+        .loading-dots:after { 
+            content: '.'; 
+            animation: dots 1.5s steps(5, end) infinite; 
+        }
+        @keyframes dots { 0%, 20% { content: '.'; } 40% { content: '..'; } 60% { content: '...'; } 80%, 100% { content: ''; } }
+        
+        input[type=range] { -webkit-appearance: none; background: rgba(255,255,255,0.1); height: 2px; border-radius: 2px; }
+        input[type=range]::-webkit-slider-thumb { 
+            -webkit-appearance: none; 
+            height: 16px; width: 16px; 
+            border-radius: 50%; 
+            background: white; 
+            cursor: pointer; 
+            border: 3px solid #000; 
+        }
+        
+        ::-webkit-scrollbar { display: none; }
+
+        .mode-btn { padding: 8px 20px; border-radius: 999px; font-size: 11px; font-weight: 600; transition: all 0.3s; border: 1px solid rgba(255,255,255,0.1); color: #888; }
+        .mode-btn.active { background: white; color: black; border-color: white; }
+        
+        input[type="color"] {
+            appearance: none;
+            -webkit-appearance: none;
+            border: none;
+            padding: 0;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            overflow: hidden;
+            background: none;
+            cursor: pointer;
+        }
+        input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+        input[type="color"]::-webkit-color-swatch { border: 1px solid rgba(255,255,255,0.2); border-radius: 50%; }
+    </style>
+</head>
+<body>
+
+    <div id="canvas-container"></div>
+
+    <!-- 初始设置屏 -->
+    <div id="setup-screen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+        <div class="glass-ui max-w-2xl w-full p-12 rounded-[3rem] space-y-10 max-h-[90vh] overflow-y-auto">
+            <header class="text-center">
+                <h1 class="text-4xl font-bold tracking-[0.5em] text-white mb-3 text-shadow-lg">后室建筑师</h1>
+                <p class="text-neutral-500 text-[10px] tracking-[0.4em] uppercase font-bold">Physical Light & Shadow Pro</p>
+            </header>
+
+            <div class="space-y-8">
+                <!-- 场景选择 -->
+                <div class="space-y-4">
+                    <label class="text-[11px] uppercase tracking-[0.2em] text-neutral-400 font-bold">场景类别 / Scenario</label>
+                    <div class="grid grid-cols-3 gap-4" id="style-options">
+                        <div class="option-card p-6 rounded-3xl active" data-style="office">
+                            <div class="text-sm text-white mb-2 font-bold">无尽办公室</div>
+                            <div class="text-[10px] text-neutral-500">干燥地毯与物理灯阵。</div>
+                        </div>
+                        <div class="option-card p-6 rounded-3xl" data-style="pool">
+                            <div class="text-sm text-white mb-2 font-bold">无边泳池</div>
+                            <div class="text-[10px] text-neutral-500">高反光瓷砖与静谧水体。</div>
+                        </div>
+                        <div class="option-card p-6 rounded-3xl" data-style="tunnel">
+                            <div class="text-sm text-white mb-2 font-bold">地下通道</div>
+                            <div class="text-[10px] text-neutral-500">重型混凝土与工业遗迹。</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 频率 -->
+                <div class="space-y-4">
+                    <label class="text-[11px] uppercase tracking-[0.2em] text-neutral-400 font-bold">情绪频率 / Frequency</label>
+                    <div class="flex flex-wrap gap-3" id="emotion-tags">
+                        <button class="px-5 py-2.5 rounded-full border border-neutral-800 text-xs bg-white text-black font-bold" data-val="平静怀旧">平静怀旧</button>
+                        <button class="px-5 py-2.5 rounded-full border border-neutral-800 text-xs hover:border-neutral-500 transition-all" data-val="微妙不安">微妙不安</button>
+                        <button class="px-5 py-2.5 rounded-full border border-neutral-800 text-xs hover:border-neutral-500 transition-all" data-val="工业异类">工业异类</button>
+                    </div>
+                </div>
+
+                <!-- 色彩 -->
+                <div class="space-y-4">
+                    <label class="text-[11px] uppercase tracking-[0.2em] text-neutral-400 font-bold">空间基调 / Base Color</label>
+                    <div class="flex flex-wrap gap-3">
+                        <button class="w-10 h-10 rounded-full border-4 border-neutral-900 color-opt ring-2 ring-transparent hover:ring-white transition-all shadow-xl" data-color="#B22222" style="background:#B22222"></button>
+                        <button class="w-10 h-10 rounded-full border-4 border-neutral-900 color-opt shadow-xl" data-color="#008080" style="background:#008080"></button>
+                        <button class="w-10 h-10 rounded-full border-4 border-neutral-900 color-opt shadow-xl" data-color="#32CD32" style="background:#32CD32"></button>
+                        <button class="w-10 h-10 rounded-full border-4 border-neutral-900 color-opt shadow-xl" data-color="#DAA520" style="background:#DAA520"></button>
+                        <button class="w-10 h-10 rounded-full border-4 border-neutral-900 color-opt shadow-xl" data-color="#8A2BE2" style="background:#8A2BE2"></button>
+                        <button class="w-10 h-10 rounded-full border-4 border-neutral-900 color-opt shadow-xl" data-color="#FF4500" style="background:#FF4500"></button>
+                        <input type="color" id="custom-color" class="w-10 h-10 bg-transparent cursor-pointer ml-4">
+                    </div>
+                </div>
+
+                <button id="generate-btn" class="w-full py-6 btn-primary rounded-3xl text-sm font-bold tracking-[0.5em] uppercase active:scale-95">
+                    渲染模型 (Physically-Based Render)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 加载层 -->
+    <div id="loader" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/95 backdrop-blur-2xl hidden">
+        <div class="text-center">
+            <div class="w-20 h-20 border-b-2 border-white rounded-full animate-spin mb-8 mx-auto opacity-30"></div>
+            <p class="text-[10px] tracking-[0.6em] uppercase text-white font-bold">计算光影路径<span class="loading-dots"></span></p>
+        </div>
+    </div>
+
+    <!-- 场景交互 UI -->
+    <div id="scene-ui" class="fixed bottom-10 left-1/2 -translate-x-1/2 z-40 hidden flex flex-col items-center gap-6">
+        <div id="item-actions" class="hidden glass-ui px-8 py-4 rounded-full flex items-center gap-8 animate-fade-in shadow-2xl">
+            <div class="flex items-center gap-4">
+                <button id="mode-translate" class="mode-btn active uppercase">移动</button>
+                <button id="mode-rotate" class="mode-btn uppercase">旋转</button>
+            </div>
+            <div class="w-px h-6 bg-white/10"></div>
+            <button id="delete-item" class="text-[11px] font-bold text-red-500 hover:text-red-400 transition uppercase tracking-widest">移除</button>
+        </div>
+
+        <div class="glass-ui px-10 py-5 rounded-full flex items-center gap-10 shadow-2xl">
+            <button id="add-item" class="text-[11px] font-bold tracking-widest hover:text-white text-neutral-500 transition uppercase">添加物件</button>
+            <div class="w-px h-6 bg-white/10"></div>
+            <button id="take-photo" class="text-[11px] font-bold tracking-widest hover:text-white text-neutral-500 transition uppercase">4K快照</button>
+            <div class="w-px h-6 bg-white/10"></div>
+            <button id="reset-app" class="text-[11px] font-bold tracking-widest hover:text-white text-neutral-500 transition uppercase">重筑</button>
+        </div>
+    </div>
+
+    <!-- 侧边面板 -->
+    <div id="adjust-panel" class="fixed right-8 top-1/2 -translate-y-1/2 z-40 hidden">
+        <div class="glass-ui p-8 rounded-[3rem] flex flex-col gap-8 w-16 hover:w-64 transition-all duration-700 overflow-hidden group">
+            <div class="flex items-center gap-8 min-w-[240px]">
+                <span class="w-8 text-center text-[10px] opacity-50 font-bold">LUM</span>
+                <input type="range" id="light-slider" min="0" max="20" step="0.1" value="10" class="w-full opacity-0 group-hover:opacity-100 transition-opacity">
+            </div>
+            <div class="flex items-center gap-8 min-w-[240px]">
+                <span class="w-8 text-center text-[10px] opacity-50 font-bold">COL</span>
+                <div class="flex-1 opacity-0 group-hover:opacity-100 transition-opacity flex justify-start">
+                    <input type="color" id="light-color-picker" value="#ffffff">
+                </div>
+            </div>
+            <div class="flex items-center gap-8 min-w-[240px]">
+                <span class="w-8 text-center text-[10px] opacity-50 font-bold">FOG</span>
+                <input type="range" id="fog-slider" min="0" max="0.1" step="0.001" value="0.04" class="w-full opacity-0 group-hover:opacity-100 transition-opacity">
+            </div>
+            <div class="flex items-center gap-8 min-w-[240px]">
+                <span class="w-8 text-center text-[10px] opacity-50 font-bold">AMB</span>
+                <input type="range" id="env-slider" min="0" max="2" step="0.05" value="0.4" class="w-full opacity-0 group-hover:opacity-100 transition-opacity">
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="fixed top-12 left-1/2 -translate-x-1/2 z-[100] px-8 py-4 glass-ui rounded-full text-[11px] font-bold tracking-[0.3em] uppercase opacity-0 pointer-events-none transition-all duration-700"></div>
+
+    <script>
+        /**
+         * Liminal Architect 4K Pro
+         * JavaScript Logic
+         */
+        class LiminalApp {
+            constructor() {
+                this.selectedStyle = "office";
+                this.selectedEmotion = "平静怀旧";
+                this.selectedColor = "#B22222";
+                this.items = [];
+                this.selectedObject = null;
+                this.transformMode = 'translate';
+                this.ceilingLightMeshes = [];
+                this.mainPointLight = null;
+
+                this.initThree();
+                this.bindUI();
+                this.animate();
+            }
+
+            initThree() {
+                this.scene = new THREE.Scene();
+                this.scene.background = new THREE.Color(0x050505);
+                this.scene.fog = new THREE.FogExp2(0x050505, 0.04);
+
+                this.camera = new THREE.PerspectiveCamera(38, window.innerWidth / window.innerHeight, 0.1, 1000);
+                this.camera.position.set(22, 18, 22);
+
+                this.renderer = new THREE.WebGLRenderer({ 
+                    antialias: true, 
+                    preserveDrawingBuffer: true,
+                    powerPreference: "high-performance"
+                });
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+                
+                this.renderer.physicallyCorrectLights = true;
+                this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+                this.renderer.toneMappingExposure = 1.2;
+                this.renderer.outputEncoding = THREE.sRGBEncoding;
+                
+                this.renderer.shadowMap.enabled = true;
+                this.renderer.shadowMap.type = THREE.PCFSoftShadowMap; 
+                
+                this.container = document.getElementById('canvas-container');
+                this.container.appendChild(this.renderer.domElement);
+
+                // 初始化 OrbitControls
+                this.orbit = new THREE.OrbitControls(this.camera, this.renderer.domElement);
+                this.orbit.enableDamping = true;
+                this.orbit.dampingFactor = 0.03;
+                this.orbit.maxPolarAngle = Math.PI / 2.15; 
+
+                // 初始化 TransformControls
+                this.transform = new THREE.TransformControls(this.camera, this.renderer.domElement);
+                this.transform.addEventListener('dragging-changed', (e) => {
+                    this.orbit.enabled = !e.value;
+                });
+                this.scene.add(this.transform);
+
+                this.worldGroup = new THREE.Group();
+                this.scene.add(this.worldGroup);
+
+                this.raycaster = new THREE.Raycaster();
+                this.mouse = new THREE.Vector2();
+
+                window.addEventListener('resize', () => this.onResize());
+                this.renderer.domElement.addEventListener('pointerdown', (e) => this.onPointerDown(e));
+            }
+
+            createPhysicalTexture(style, color = 0xffffff, size = 1024) {
+                const canvas = document.createElement('canvas');
+                canvas.width = canvas.height = size;
+                const ctx = canvas.getContext('2d');
+                const baseCol = new THREE.Color(color);
+
+                if (style === 'carpet') {
+                    ctx.fillStyle = `#${baseCol.getHexString()}`;
+                    ctx.fillRect(0, 0, size, size);
+                    for(let i=0; i<15000; i++) {
+                        const alpha = Math.random() * 0.1;
+                        ctx.fillStyle = `rgba(0,0,0,${alpha})`;
+                        ctx.fillRect(Math.random()*size, Math.random()*size, 3, 3);
+                    }
+                } else if (style === 'tile') {
+                    const tileCol = baseCol.clone().offsetHSL(0, -0.05, 0.1);
+                    ctx.fillStyle = `#${tileCol.getHexString()}`;
+                    ctx.fillRect(0, 0, size, size);
+                    ctx.strokeStyle = "rgba(0,0,0,0.3)";
+                    ctx.lineWidth = 8;
+                    const step = size / 8;
+                    for(let i=0; i<=size; i+=step) {
+                        ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, size); ctx.stroke();
+                        ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(size, i); ctx.stroke();
+                    }
+                } else if (style === 'concrete') {
+                    const concCol = baseCol.clone().offsetHSL(0, -0.4, -0.3);
+                    ctx.fillStyle = `#${concCol.getHexString()}`;
+                    ctx.fillRect(0, 0, size, size);
+                    for(let i=0; i<5000; i++) {
+                        ctx.fillStyle = `rgba(0,0,0,${Math.random()*0.15})`;
+                        ctx.fillRect(Math.random()*size, Math.random()*size, 2, 2);
+                    }
+                }
+                const tex = new THREE.CanvasTexture(canvas);
+                tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+                tex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+                return tex;
+            }
+
+            bindUI() {
+                document.querySelectorAll('.option-card').forEach(card => {
+                    card.onclick = () => {
+                        document.querySelectorAll('.option-card').forEach(c => c.classList.remove('active'));
+                        card.classList.add('active');
+                        this.selectedStyle = card.dataset.style;
+                    };
+                });
+
+                document.querySelectorAll('#emotion-tags button').forEach(btn => {
+                    btn.onclick = () => {
+                        document.querySelectorAll('#emotion-tags button').forEach(b => b.classList.remove('bg-white', 'text-black'));
+                        btn.classList.add('bg-white', 'text-black');
+                        this.selectedEmotion = btn.dataset.val;
+                    }
+                });
+
+                document.querySelectorAll('.color-opt').forEach(btn => {
+                    btn.onclick = () => {
+                        this.selectedColor = btn.dataset.color;
+                        document.getElementById('custom-color').value = btn.dataset.color;
+                    }
+                });
+                document.getElementById('custom-color').oninput = (e) => this.selectedColor = e.target.value;
+
+                document.getElementById('generate-btn').onclick = () => this.generate();
+
+                document.getElementById('light-slider').oninput = (e) => {
+                    const intensity = parseFloat(e.target.value);
+                    this.ceilingLightMeshes.forEach(mesh => mesh.material.emissiveIntensity = intensity * 0.5);
+                    if(this.mainPointLight) this.mainPointLight.intensity = intensity; 
+                };
+
+                document.getElementById('light-color-picker').oninput = (e) => {
+                    const newColor = new THREE.Color(e.target.value);
+                    this.ceilingLightMeshes.forEach(mesh => mesh.material.emissive.copy(newColor));
+                    if(this.mainPointLight) this.mainPointLight.color.copy(newColor);
+                };
+
+                document.getElementById('fog-slider').oninput = (e) => this.scene.fog.density = e.target.value;
+                document.getElementById('env-slider').oninput = (e) => { if(this.envLight) this.envLight.intensity = e.target.value; };
+
+                document.getElementById('mode-translate').onclick = () => this.setTransformMode('translate');
+                document.getElementById('mode-rotate').onclick = () => this.setTransformMode('rotate');
+
+                document.getElementById('take-photo').onclick = () => this.capture();
+                document.getElementById('reset-app').onclick = () => location.reload();
+                document.getElementById('add-item').onclick = () => this.addRandomAnchor(null, true);
+                document.getElementById('delete-item').onclick = () => this.deleteSelected();
+            }
+
+            setTransformMode(mode) {
+                this.transformMode = mode;
+                this.transform.setMode(mode);
+                document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+                document.getElementById(`mode-${mode}`).classList.add('active');
+            }
+
+            onPointerDown(e) {
+                this.mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+                this.mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+                this.raycaster.setFromCamera(this.mouse, this.camera);
+                const intersects = this.raycaster.intersectObjects(this.items, true);
+                if (intersects.length > 0) {
+                    let obj = intersects[0].object;
+                    while(obj.parent && obj.parent !== this.worldGroup) obj = obj.parent;
+                    this.selectObject(obj);
+                } else if(!this.transform.dragging) {
+                    this.deselectObject();
+                }
+            }
+
+            selectObject(obj) {
+                this.selectedObject = obj;
+                this.transform.attach(obj);
+                document.getElementById('item-actions').classList.remove('hidden');
+            }
+
+            deselectObject() {
+                this.selectedObject = null;
+                this.transform.detach();
+                document.getElementById('item-actions').classList.add('hidden');
+            }
+
+            deleteSelected() {
+                if(this.selectedObject) {
+                    this.worldGroup.remove(this.selectedObject);
+                    this.items = this.items.filter(i => i !== this.selectedObject);
+                    this.deselectObject();
+                    this.showToast("物件已抹除");
+                }
+            }
+
+            async generate() {
+                document.getElementById('loader').classList.remove('hidden');
+                const emotionConfig = {
+                    "平静怀旧": { count: 5, chaos: 0, items: ['paper', 'thermos', 'bear'] },
+                    "微妙不安": { count: 14, chaos: 0.6, items: ['bear', 'lamp', 'tv', 'flashlight', 'thermos'] },
+                    "工业异类": { count: 20, chaos: 0.9, items: ['bicycle', 'tv', 'flashlight', 'concrete_block'] }
+                }[this.selectedEmotion];
+
+                setTimeout(() => {
+                    this.buildScene(emotionConfig);
+                    document.getElementById('loader').classList.add('hidden');
+                    document.getElementById('setup-screen').classList.add('hidden');
+                    document.getElementById('scene-ui').classList.remove('hidden');
+                    document.getElementById('adjust-panel').classList.remove('hidden');
+                    this.showToast("4K 物理模拟完成。");
+                }, 1500);
+            }
+
+            buildScene(config) {
+                while(this.worldGroup.children.length > 0) this.worldGroup.remove(this.worldGroup.children[0]);
+                this.items = [];
+                this.ceilingLightMeshes = [];
+                const scale = [18, 6.5, 18];
+                const baseColor = new THREE.Color(this.selectedColor);
+
+                this.envLight = new THREE.AmbientLight(baseColor.clone().offsetHSL(0,-0.3,0.1), 0.4);
+                this.worldGroup.add(this.envLight);
+
+                this.mainPointLight = new THREE.PointLight(0xffffff, 10, 80);
+                this.mainPointLight.position.set(0, scale[1] - 1.5, 0);
+                this.mainPointLight.castShadow = true;
+                this.mainPointLight.shadow.mapSize.set(4096, 4096);
+                this.mainPointLight.shadow.radius = 6; 
+                this.worldGroup.add(this.mainPointLight);
+
+                let floorMat, wallMat;
+                if(this.selectedStyle === 'office') {
+                    const tex = this.createPhysicalTexture('carpet', baseColor);
+                    tex.repeat.set(scale[0]/2, scale[2]/2);
+                    floorMat = new THREE.MeshStandardMaterial({ map: tex, roughness: 1, metalness: 0 });
+                    wallMat = new THREE.MeshStandardMaterial({ color: baseColor.clone().offsetHSL(0,-0.1,0), roughness: 0.85 });
+                } else if(this.selectedStyle === 'pool') {
+                    const tex = this.createPhysicalTexture('tile', baseColor);
+                    tex.repeat.set(scale[0], scale[2]);
+                    floorMat = new THREE.MeshPhysicalMaterial({ map: tex, roughness: 0.05, metalness: 0.1, clearcoat: 1.0 });
+                    wallMat = floorMat.clone();
+                } else {
+                    const tex = this.createPhysicalTexture('concrete', baseColor);
+                    floorMat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95 });
+                    wallMat = floorMat.clone();
+                }
+
+                const floor = new THREE.Mesh(new THREE.BoxGeometry(scale[0], 0.2, scale[2]), floorMat);
+                floor.receiveShadow = true;
+                this.worldGroup.add(floor);
+
+                const w1 = new THREE.Mesh(new THREE.BoxGeometry(0.3, scale[1], scale[2]), wallMat);
+                w1.position.set(-scale[0]/2 - 0.15, scale[1]/2, 0);
+                w1.receiveShadow = true;
+                this.worldGroup.add(w1);
+                const w2 = new THREE.Mesh(new THREE.BoxGeometry(scale[0], scale[1], 0.3), wallMat);
+                w2.position.set(0, scale[1]/2, -scale[2]/2 - 0.15);
+                w2.receiveShadow = true;
+                this.worldGroup.add(w2);
+
+                this.createPillars(scale, wallMat);
+                this.createCeilingLights(scale, 5);
+
+                if(this.selectedStyle === 'pool' || this.selectedStyle === 'tunnel') {
+                    const railGeo = new THREE.CylinderGeometry(0.06, 0.06, scale[2], 32);
+                    const railMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 1, roughness: 0.05 });
+                    const rail = new THREE.Mesh(railGeo, railMat);
+                    rail.rotation.x = Math.PI/2;
+                    rail.position.set(-scale[0]/2 + 0.4, 1.4, 0);
+                    rail.castShadow = true;
+                    this.worldGroup.add(rail);
+                }
+
+                if(this.selectedStyle === 'pool') {
+                    const waterCol = baseColor.clone().lerp(new THREE.Color(0x00ffff), 0.5);
+                    const water = new THREE.Mesh(new THREE.PlaneGeometry(scale[0], scale[2]), new THREE.MeshPhysicalMaterial({ 
+                        color: waterCol, transparent: true, opacity: 0.4, transmission: 0.5, thickness: 1 
+                    }));
+                    water.rotation.x = -Math.PI/2;
+                    water.position.y = 0.55;
+                    this.worldGroup.add(water);
+                }
+
+                for(let i=0; i<config.count; i++) {
+                    const type = config.items[Math.floor(Math.random() * config.items.length)];
+                    this.addRandomAnchor(scale, false, type, config.chaos);
+                }
+
+                this.worldGroup.scale.set(0.1,0.1,0.1);
+                gsap.to(this.worldGroup.scale, { x: 1, y: 1, z: 1, duration: 2.5, ease: "power4.out" });
+            }
+
+            createPillars(scale, mat) {
+                const count = this.selectedStyle === 'office' ? 4 : 2;
+                for(let i=0; i<count; i++) {
+                    const p = new THREE.Mesh(new THREE.BoxGeometry(1.2, scale[1], 1.2), mat);
+                    p.position.set((Math.random()-0.5)*scale[0]*0.6, scale[1]/2, (Math.random()-0.5)*scale[2]*0.6);
+                    p.castShadow = true;
+                    p.receiveShadow = true;
+                    this.worldGroup.add(p);
+                }
+            }
+
+            createCeilingLights(scale, intensity) {
+                const lightMat = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveIntensity: intensity });
+                if(this.selectedStyle === 'office') {
+                    for(let x=-scale[0]/2+3; x<scale[0]/2; x+=6) {
+                        for(let z=-scale[2]/2+3; z<scale[2]/2; z+=5) {
+                            const l = new THREE.Mesh(new THREE.PlaneGeometry(3, 1.5), lightMat.clone());
+                            l.rotation.x = Math.PI/2;
+                            l.position.set(x, scale[1] - 0.05, z);
+                            this.worldGroup.add(l);
+                            this.ceilingLightMeshes.push(l);
+                        }
+                    }
+                } else {
+                    const l = new THREE.Mesh(new THREE.CircleGeometry(1.5, 64), lightMat.clone());
+                    l.rotation.x = Math.PI/2;
+                    l.position.set(0, scale[1] - 0.05, 0);
+                    this.worldGroup.add(l);
+                    this.ceilingLightMeshes.push(l);
+                }
+            }
+
+            addRandomAnchor(scale, isManual = false, forceType = null, chaos = 0) {
+                const s = scale || [18, 6, 18];
+                const type = forceType || ['bear', 'tv', 'flashlight', 'thermos', 'paper', 'lamp', 'bicycle'][Math.floor(Math.random()*7)];
+                const anchor = new THREE.Group();
+                const objColor = new THREE.Color().setHSL(Math.random(), 0.9, 0.45);
+
+                if(type === 'bear') {
+                    const mat = new THREE.MeshStandardMaterial({ color: objColor, roughness: 0.8 });
+                    const body = new THREE.Mesh(new THREE.SphereGeometry(0.4, 32, 32), mat);
+                    const head = new THREE.Mesh(new THREE.SphereGeometry(0.3, 32, 32), mat);
+                    head.position.y = 0.55;
+                    anchor.add(body, head);
+                    if(chaos > 0.5 && Math.random() > 0.5) {
+                        head.material = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2 });
+                    }
+                } else if(type === 'tv') {
+                    const body = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.9, 0.8), new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.3 }));
+                    const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.7), new THREE.MeshStandardMaterial({ color: objColor, emissive: objColor, emissiveIntensity: 0.8 }));
+                    screen.position.z = 0.41;
+                    anchor.add(body, screen);
+                } else if(type === 'flashlight') {
+                    const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.6, 24), new THREE.MeshStandardMaterial({ color: objColor, metalness: 1, roughness: 0.1 }));
+                    const head = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.12, 0.25, 24), new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 1 }));
+                    head.position.y = 0.35;
+                    anchor.add(handle, head);
+                } else if(type === 'thermos') {
+                    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.7, 24), new THREE.MeshStandardMaterial({ color: objColor, metalness: 0.8, roughness: 0.2 }));
+                    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.23, 0.23, 0.15, 24), new THREE.MeshStandardMaterial({ color: 0xdddddd, metalness: 1 }));
+                    cap.position.y = 0.4;
+                    if(chaos > 0.5 && Math.random() > 0.5) cap.rotation.z = 0.6;
+                    anchor.add(body, cap);
+                } else if(type === 'paper') {
+                    const plane = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.7, 3), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1 }));
+                    plane.rotation.x = Math.PI/2;
+                    anchor.add(plane);
+                } else if(type === 'lamp') {
+                    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.05, 32), new THREE.MeshStandardMaterial({ color: 0x111111 }));
+                    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.8, 12), new THREE.MeshStandardMaterial({ color: 0x111111 }));
+                    stem.position.y = 0.4;
+                    const shade = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.4, 32, 1, true), new THREE.MeshStandardMaterial({ color: objColor, side: THREE.DoubleSide }));
+                    shade.position.y = 0.75;
+                    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 16), new THREE.MeshBasicMaterial({ color: 0xfff000 }));
+                    bulb.position.y = 0.75;
+                    anchor.add(base, stem, shade, bulb);
+                    if(this.selectedStyle === 'pool' && Math.random() > 0.3) anchor.position.y = -0.5;
+                } else if(type === 'bicycle') {
+                    const w1 = new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.03, 12, 32), new THREE.MeshStandardMaterial({ color: 0x0a0a0a, metalness: 0.5 }));
+                    const w2 = w1.clone(); w2.position.x = 1.0;
+                    const frame = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.06, 0.06), new THREE.MeshStandardMaterial({ color: objColor, metalness: 0.8, roughness: 0.1 }));
+                    frame.position.set(0.5, 0.4, 0);
+                    anchor.add(w1, w2, frame);
+                    if(chaos > 0.8) anchor.rotation.z = Math.PI/2;
+                } else {
+                    const block = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.6, 1.3), new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.9 }));
+                    anchor.add(block);
+                }
+
+                anchor.position.set((Math.random()-0.5)*s[0]*0.7, isManual ? 1.5 : 0.75, (Math.random()-0.5)*s[2]*0.7);
+                if(!isManual && type === 'paper') anchor.position.y = 2.5 + Math.random()*2;
+                anchor.rotation.y = Math.random() * Math.PI;
+                anchor.castShadow = true;
+                anchor.receiveShadow = true;
+                anchor.children.forEach(c => { c.castShadow = true; c.receiveShadow = true; });
+                
+                this.worldGroup.add(anchor);
+                this.items.push(anchor);
+            }
+
+            onResize() {
+                this.camera.aspect = window.innerWidth / window.innerHeight;
+                this.camera.updateProjectionMatrix();
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+
+            showToast(msg) {
+                const toast = document.getElementById('toast');
+                toast.innerText = msg; toast.style.opacity = '1';
+                setTimeout(() => toast.style.opacity = '0', 3000);
+            }
+
+            capture() {
+                const link = document.createElement('a');
+                link.download = `liminal_4k_ready_${Date.now()}.png`;
+                link.href = this.renderer.domElement.toDataURL('image/png', 1.0);
+                link.click();
+            }
+
+            animate() {
+                requestAnimationFrame(() => this.animate());
+                this.orbit.update();
+                const time = performance.now() * 0.001;
+                this.items.forEach((item, i) => {
+                    if(item !== this.selectedObject) {
+                        item.position.y += Math.sin(time + i) * 0.002;
+                    }
+                });
+                this.renderer.render(this.scene, this.camera);
+            }
+        }
+
+        window.onload = () => new LiminalApp();
+    </script>
+</body>
+</html>
